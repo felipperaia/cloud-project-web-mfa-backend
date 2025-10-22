@@ -9,3 +9,4 @@ qrcode==7.4.2
 motor==3.6.0
 pydantic==1.10.15
 email-validator==2.2.0
+sendgrid==6.11.0
