@@ -7,12 +7,17 @@ from .config import settings
 app = FastAPI(title="Auth + MFA (FastAPI)")
 
 # CORS apenas se necessário para front em domínio separado
+ALLOWED_ORIGINS = [
+    "https://mfacloud.netlify.app/"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://mfacloud.netlify.app/"],
+    allow_origins=ALLOWED_ORIGINS, 
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"], 
+    max_age=600,
 )
 
 app.include_router(auth.router)
