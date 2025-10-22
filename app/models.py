@@ -20,7 +20,7 @@ class MFAVerify(BaseModel):
 
 class MFAEnrollVerify(BaseModel):
     code: str
-
+    username: str
 class PasswordResetRequest(BaseModel):
     email: EmailStr
 
