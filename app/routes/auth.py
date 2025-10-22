@@ -1,3 +1,5 @@
+import pyotp
+
 from fastapi import APIRouter, HTTPException, Request, Response, Depends
 from fastapi import status
 from datetime import datetime, timedelta
@@ -66,7 +68,7 @@ async def register(payload: UserCreate):
     }
     await users.insert_one(doc)
 
-    confirm_link = f"/confirm-email?token={email_token}"
+    confirm_link = f"https://cloud-project-web-mfa-backend.onrender.com/confirm-email?token={email_token}"
     email_html = f"""
     <h3>Confirme seu e-mail</h3>
     <p>Clique para confirmar: {confirm_link}</p>
@@ -101,46 +103,71 @@ async def confirm_email(token: str, response: Response):
     return Response(status_code=302)
 
 @router.get("/mfa/enroll")
-async def mfa_enroll_page(temp: str):
-    payload = decode_jwt(temp)
+async def mfa_enroll(request: Request):
+    token = request.query_params.get("temp")  # token temporário para enrolar MFA
+    payload = decode_jwt(token) if token else None
     if not payload or payload.get("type") != "mfa_enroll":
-        raise HTTPException(401, "Não autorizado")
+        raise HTTPException(401, "Token inválido para enrolamento MFA")
 
     user = await users.find_one({"_id": ObjectId(payload["sub"])})
-    if not user or not user.get("email_verified"):
-        raise HTTPException(400, "Usuário inválido")
+    if not user:
+        raise HTTPException(404, "Usuário não encontrado")
 
-    secret = mfa_generate_secret()
-    uri = mfa_uri(secret, user["username"], settings.ISSUER)
-    qr_data_uri = qr_png_base64(uri)
-    # guardamos secret temporariamente na sessão mínima: para simplicidade, retornamos
-    # ao front que poste de volta para ativar
-    return {"secret": secret, "otpauth_uri": uri, "qr_png_data_uri": qr_data_uri}
+    secret = pyotp.random_base32()
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(
+        name=user["username"], issuer_name="SeuApp"
+    )
+
+    # Armazena no usuário temporariamente para confirmar depois
+    await users.update_one(
+        {"_id": user["_id"]}, {"$set": {"mfa_secret_temp": secret}}
+    )
+
+    # Gera QR code em base64 (se usa biblioteca qrcode), ou mande só o URI
+    import qrcode
+    from io import BytesIO
+    import base64
+
+    img = qrcode.make(uri)
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    qr_b64 = base64.b64encode(buf.getvalue()).decode()
+
+    return {
+        "secret": secret,
+        "otpauth_uri": uri,
+        "qr_png_data_uri": f"data:image/png;base64,{qr_b64}",
+    }
+
 
 @router.post("/api/mfa/enroll")
-async def mfa_enroll_verify(body: MFAEnrollVerify, request: Request):
-    # Em um app real, o secret viria de armazenamento temporário ou corpo autenticado
-    # Aqui, por simplicidade, exigimos secret no corpo via JS seguro em sequência controlada
-    secret = request.query_params.get("secret")
-    user_id = request.query_params.get("uid")
-    if not secret or not user_id:
-        raise HTTPException(400, "Parâmetros ausentes")
+async def mfa_enroll_confirm(body: MFAEnrollVerify):
+    user = await users.find_one({"username": body.username})
+    if not user or "mfa_secret_temp" not in user or not user["mfa_secret_temp"]:
+        raise HTTPException(400, "Enrolamento não iniciado")
 
-    if not mfa_verify_code(secret, body.code, valid_window=1):
+    secret = user["mfa_secret_temp"]
+    totp = pyotp.TOTP(secret)
+    if not totp.verify(body.code):
         raise HTTPException(400, "Código TOTP inválido")
 
-    # gera 10 backup codes
-    raw_codes = [random_token_urlsafe(10) for _ in range(10)]
-    hashed_codes = [hash_token(c) for c in raw_codes]
+    # Gera códigos backup
+    backup_codes_raw = [random_token_urlsafe(10) for _ in range(10)]
+    backup_codes_hashed = [hash_token(c) for c in backup_codes_raw]
 
-    await users.update_one({"userid": user_id}, {"$set": {
-        "mfa_enabled": True,
-        "mfa_secret": secret,
-        "mfa_backup_codes": hashed_codes,
-        "updated_at": datetime.utcnow(),
-    }})
+    await users.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "mfa_enabled": True,
+                "mfa_secret": secret,
+                "mfa_backup_codes": backup_codes_hashed,
+            },
+            "$unset": {"mfa_secret_temp": ""},
+        },
+    )
+    return {"ok": True, "backup_codes": backup_codes_raw}
 
-    return {"ok": True, "backup_codes": raw_codes}
 
 @router.post("/api/login")
 async def login(payload: UserLogin, response: Response, request: Request):
