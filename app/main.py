@@ -4,6 +4,14 @@ from .routes import auth, home
 
 app = FastAPI(title="Auth + MFA (FastAPI)")
 
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    return PlainTextResponse("OK", status_code=200)
+
+@app.head("/healthz", include_in_schema=False)
+async def healthz_head():
+    return PlainTextResponse("", status_code=200)
+
 ALLOWED_ORIGINS = [
     "https://mfacloud.netlify.app",
     # "http://localhost:3000",
