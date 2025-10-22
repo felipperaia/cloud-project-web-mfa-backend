@@ -1,5 +1,4 @@
 import pyotp
-from ..security import get_current_user
 from fastapi import APIRouter, HTTPException, Request, Response, Depends
 from fastapi import status
 from datetime import datetime, timedelta
@@ -23,19 +22,17 @@ def cookie_params():
         "path": "/",
     }
 
+
 async def find_user_by_username(username: str):
     return await users.find_one({"username": username})
+
 
 async def find_user_by_email(email: str):
     return await users.find_one({"email": email})
 
+
 @router.post("/api/register")
 async def register(payload: UserCreate):
-    # rate limit por IP
-    # Ex: 5 registros por 15 min
-    # chave: reg:<ip>
-    # ip simplificado do caller em ambiente demo
-    # Em produção, considerar headers confiáveis do proxy
     if not is_allowed(f"reg:{payload.email}", 5, 15*60):
         raise HTTPException(429, "Muitas tentativas, tente mais tarde")
 
@@ -97,14 +94,13 @@ async def confirm_email(token: str, response: Response):
         "updated_at": now,
     }})
 
-    # cria temp token para enrolar MFA
-    temp = create_jwt(str(user["_id"]), {"type": "mfa_enroll"}, minutes=15)
+    temp = create_jwt(str(user["_id"]), {"type": "mfa_enroll", "username": user["username"]}, minutes=15)
     response.headers["Location"] = f"/mfa/enroll?temp={temp}"
     return Response(status_code=302)
 
 @router.get("/mfa/enroll")
 async def mfa_enroll(request: Request):
-    token = request.query_params.get("temp")  # token temporário para enrolar MFA
+    token = request.query_params.get("temp")
     payload = decode_jwt(token) if token else None
     if not payload or payload.get("type") != "mfa_enroll":
         raise HTTPException(401, "Token inválido para enrolamento MFA")
@@ -118,12 +114,10 @@ async def mfa_enroll(request: Request):
         name=user["username"], issuer_name="SeuApp"
     )
 
-    # Armazena no usuário temporariamente para confirmar depois
     await users.update_one(
         {"_id": user["_id"]}, {"$set": {"mfa_secret_temp": secret}}
     )
 
-    # Gera QR code em base64 (se usa biblioteca qrcode), ou mande só o URI
     import qrcode
     from io import BytesIO
     import base64
@@ -137,12 +131,13 @@ async def mfa_enroll(request: Request):
         "secret": secret,
         "otpauth_uri": uri,
         "qr_png_data_uri": f"data:image/png;base64,{qr_b64}",
+        "username": user["username"]
     }
+
 
 @router.get("/api/mfa/enroll-token")
 async def get_mfa_enroll_token(current_user=Depends(get_current_user)):
-    # current_user deve ser obtido via dependência que lê sessão JWT
-    temp_token = create_jwt(str(current_user["_id"]), {"type": "mfa_enroll"}, minutes=15)
+    temp_token = create_jwt(str(current_user["_id"]), {"type": "mfa_enroll", "username": current_user["username"]}, minutes=15)
     return {"temp_token": temp_token}
 
 
@@ -157,7 +152,6 @@ async def mfa_enroll_confirm(body: MFAEnrollVerify):
     if not totp.verify(body.code):
         raise HTTPException(400, "Código TOTP inválido")
 
-    # Gera códigos backup
     backup_codes_raw = [random_token_urlsafe(10) for _ in range(10)]
     backup_codes_hashed = [hash_token(c) for c in backup_codes_raw]
 
@@ -190,12 +184,13 @@ async def login(payload: UserLogin, response: Response, request: Request):
         raise HTTPException(403, "E-mail não confirmado")
 
     if user.get("mfa_enabled"):
-        temp = create_jwt(str(user["_id"]), {"type": "mfa_challenge"}, minutes=settings.MFA_TEMP_EXP_MIN)
+        temp = create_jwt(str(user["_id"]), {"type": "mfa_challenge", "username": user["username"]}, minutes=settings.MFA_TEMP_EXP_MIN)
         return {"mfa_required": True, "temp_token": temp}
 
     session = create_jwt(user["userid"], {"type": "session"}, minutes=settings.SESSION_EXP_MIN)
     response.set_cookie("session", session, **cookie_params())
     return {"ok": True}
+
 
 @router.post("/api/mfa/verify")
 async def mfa_verify(body: MFAVerify, response: Response):
@@ -211,7 +206,6 @@ async def mfa_verify(body: MFAVerify, response: Response):
     is_code = code.isdigit() and mfa_verify_code(user["mfa_secret"], code, valid_window=1)
     is_backup = False
     if not is_code:
-        # backup code
         h = hash_token(code)
         if h in user.get("mfa_backup_codes", []):
             is_backup = True
@@ -223,6 +217,7 @@ async def mfa_verify(body: MFAVerify, response: Response):
     session = create_jwt(user["userid"], {"type": "session"}, minutes=settings.SESSION_EXP_MIN)
     response.set_cookie("session", session, **cookie_params())
     return {"ok": True}
+
 
 @router.post("/api/password-reset-request")
 async def password_reset_request(body: PasswordResetRequest):
@@ -241,6 +236,7 @@ async def password_reset_request(body: PasswordResetRequest):
         email_html = f"<p>Redefina sua senha: {reset_link}</p>"
         send_email(user["email"], "Redefinição de senha", email_html)
     return {"ok": True}
+
 
 @router.post("/api/reset-password")
 async def reset_password(body: PasswordResetSubmit):
