@@ -9,7 +9,7 @@ app = FastAPI(title="Auth + MFA (FastAPI)")
 # CORS apenas se necessário para front em domínio separado
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL],
+    allow_origins=["https://mfacloud.netlify.app/"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
