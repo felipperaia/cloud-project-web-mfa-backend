@@ -1,7 +1,7 @@
 import smtplib
 import ssl
 from email.message import EmailMessage
-from .config import settings
+from ..config import settings
 
 def send_email(to_email: str, subject: str, html_body: str):
     msg = EmailMessage()
