@@ -139,6 +139,12 @@ async def mfa_enroll(request: Request):
         "qr_png_data_uri": f"data:image/png;base64,{qr_b64}",
     }
 
+@router.get("/api/mfa/enroll-token")
+async def get_mfa_enroll_token(current_user=Depends(get_current_user)):
+    # current_user deve ser obtido via dependência que lê sessão JWT
+    temp_token = create_jwt(str(current_user["_id"]), {"type": "mfa_enroll"}, minutes=15)
+    return {"temp_token": temp_token}
+
 
 @router.post("/api/mfa/enroll")
 async def mfa_enroll_confirm(body: MFAEnrollVerify):
