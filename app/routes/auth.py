@@ -168,6 +168,14 @@ async def mfa_enroll_confirm(body: MFAEnrollVerify):
     )
     return {"ok": True, "backup_codes": backup_codes_raw}
 
+@router.get("/api/home")
+async def home(current_user=Depends(get_current_user)):
+    return {
+        "userid": current_user.get("userid"),
+        "username": current_user.get("username"),
+        "email": current_user.get("email"),
+        "mfa_enabled": current_user.get("mfa_enabled", False),
+    }
 
 @router.post("/api/login")
 async def login(payload: UserLogin, response: Response, request: Request):
