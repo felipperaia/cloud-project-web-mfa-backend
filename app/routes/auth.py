@@ -1,3 +1,5 @@
+# auth.py completo corrigido
+
 import pyotp
 from fastapi import APIRouter, HTTPException, Request, Response, Depends
 from datetime import datetime, timedelta
@@ -12,7 +14,6 @@ from ..config import settings
 
 router = APIRouter()
 
-
 def cookie_params():
     return {
         "httponly": True,
@@ -21,14 +22,11 @@ def cookie_params():
         "path": "/",
     }
 
-
 async def find_user_by_username(username: str):
     return await users.find_one({"username": username})
 
-
 async def find_user_by_email(email: str):
     return await users.find_one({"email": email})
-
 
 @router.post("/api/register")
 async def register(payload: UserCreate):
@@ -199,7 +197,7 @@ async def login(payload: UserLogin, response: Response, request: Request):
         temp = create_jwt(str(user["_id"]), {"type": "mfa_challenge", "username": user["username"]}, minutes=settings.MFA_TEMP_EXP_MIN)
         return {"mfa_required": True, "temp_token": temp}
 
-    session = create_jwt(user["userid"], {"type": "session"}, minutes=settings.SESSION_EXP_MIN)
+    session = create_jwt(str(user["_id"]), {"type": "session"}, minutes=settings.SESSION_EXP_MIN)
     response.set_cookie("session", session, **cookie_params())
     return {"ok": True}
 
@@ -226,7 +224,7 @@ async def mfa_verify(body: MFAVerify, response: Response):
     if not (is_code or is_backup):
         raise HTTPException(400, "Código inválido")
 
-    session = create_jwt(user["userid"], {"type": "session"}, minutes=settings.SESSION_EXP_MIN)
+    session = create_jwt(str(user["_id"]), {"type": "session"}, minutes=settings.SESSION_EXP_MIN)
     response.set_cookie("session", session, **cookie_params())
     return {"ok": True}
 
