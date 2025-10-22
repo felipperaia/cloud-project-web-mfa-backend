@@ -10,7 +10,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer
 from bson import ObjectId
 from .config import settings
-from ..db import users
+from app.db import users
 
 # Atualizado para usar bcrypt_sha256 evitando limite 72 bytes do bcrypt puro
 pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
