@@ -17,8 +17,8 @@ router = APIRouter()
 def cookie_params():
     return {
         "httponly": True,
-        "secure": settings.RENDER,
-        "samesite": "lax",
+        "secure": True if settings.RENDER else False,
+        "samesite": "none" if settings.RENDER else "lax",
         "path": "/",
     }
 
@@ -71,7 +71,6 @@ async def register(payload: UserCreate):
 
     return {"ok": True}
 
-
 @router.get("/confirm-email")
 async def confirm_email(token: str, response: Response):
     token_hash = hash_token(token)
@@ -92,9 +91,8 @@ async def confirm_email(token: str, response: Response):
     }})
 
     temp = create_jwt(str(user["_id"]), {"type": "mfa_enroll", "username": user["username"]}, minutes=15)
-    response.headers["Location"] = f"/mfa/enroll?temp={temp}"
+    response.headers["Location"] = f"{settings.FRONTEND_URL}/mfa-enroll.html?temp={temp}"
     return Response(status_code=302)
-
 
 @router.get("/mfa/enroll")
 async def mfa_enroll(request: Request):
@@ -132,12 +130,10 @@ async def mfa_enroll(request: Request):
         "username": user["username"]
     }
 
-
 @router.get("/api/mfa/enroll-token")
 async def get_mfa_enroll_token(current_user=Depends(get_current_user)):
     temp_token = create_jwt(str(current_user["_id"]), {"type": "mfa_enroll", "username": current_user["username"]}, minutes=15)
     return {"temp_token": temp_token}
-
 
 @router.post("/api/mfa/enroll")
 async def mfa_enroll_confirm(body: MFAEnrollVerify):
@@ -166,7 +162,6 @@ async def mfa_enroll_confirm(body: MFAEnrollVerify):
     )
     return {"ok": True, "backup_codes": backup_codes_raw}
 
-
 @router.get("/api/home")
 async def home(current_user=Depends(get_current_user)):
     if not current_user.get("email_verified", False):
@@ -177,7 +172,6 @@ async def home(current_user=Depends(get_current_user)):
         "email": current_user.get("email"),
         "mfa_enabled": current_user.get("mfa_enabled", False),
     }
-
 
 @router.post("/api/login")
 async def login(payload: UserLogin, response: Response, request: Request):
@@ -200,7 +194,6 @@ async def login(payload: UserLogin, response: Response, request: Request):
     session = create_jwt(str(user["_id"]), {"type": "session"}, minutes=settings.SESSION_EXP_MIN)
     response.set_cookie("session", session, **cookie_params())
     return {"ok": True}
-
 
 @router.post("/api/mfa/verify")
 async def mfa_verify(body: MFAVerify, response: Response):
@@ -228,7 +221,6 @@ async def mfa_verify(body: MFAVerify, response: Response):
     response.set_cookie("session", session, **cookie_params())
     return {"ok": True}
 
-
 @router.post("/api/password-reset-request")
 async def password_reset_request(body: PasswordResetRequest):
     if not is_allowed(f"pwreset:{body.email}", 3, 60*60):
@@ -246,7 +238,6 @@ async def password_reset_request(body: PasswordResetRequest):
         email_html = f"<p>Redefina sua senha: {reset_link}</p>"
         send_email(user["email"], "Redefinição de senha", email_html)
     return {"ok": True}
-
 
 @router.post("/api/reset-password")
 async def reset_password(body: PasswordResetSubmit):
