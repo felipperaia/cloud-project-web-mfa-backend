@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     SMTP_USER: str
     SMTP_PASSWORD: str
     FROM_EMAIL: str
+    SENDGRID_API_KEY: str
     PORT: int = int(os.getenv("PORT", "8000"))
     FRONTEND_URL: str = "http://localhost:3000"
     RENDER: bool = os.getenv("RENDER", "false").lower() == "true"
