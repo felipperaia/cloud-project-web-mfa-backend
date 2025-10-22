@@ -1,6 +1,5 @@
 import pyotp
 from fastapi import APIRouter, HTTPException, Request, Response, Depends
-from fastapi import status
 from datetime import datetime, timedelta
 from bson import ObjectId
 from uuid import uuid4
@@ -9,10 +8,10 @@ from ..db import users
 from ..security import *
 from ..rate_limit import is_allowed
 from ..utils.emailer import send_email
-from ..utils.qr import qr_png_base64
 from ..config import settings
 
 router = APIRouter()
+
 
 def cookie_params():
     return {
@@ -35,7 +34,6 @@ async def find_user_by_email(email: str):
 async def register(payload: UserCreate):
     if not is_allowed(f"reg:{payload.email}", 5, 15*60):
         raise HTTPException(429, "Muitas tentativas, tente mais tarde")
-
     if await find_user_by_username(payload.username):
         raise HTTPException(400, "username já existe")
     if await find_user_by_email(payload.email):
@@ -75,6 +73,7 @@ async def register(payload: UserCreate):
 
     return {"ok": True}
 
+
 @router.get("/confirm-email")
 async def confirm_email(token: str, response: Response):
     token_hash = hash_token(token)
@@ -97,6 +96,7 @@ async def confirm_email(token: str, response: Response):
     temp = create_jwt(str(user["_id"]), {"type": "mfa_enroll", "username": user["username"]}, minutes=15)
     response.headers["Location"] = f"/mfa/enroll?temp={temp}"
     return Response(status_code=302)
+
 
 @router.get("/mfa/enroll")
 async def mfa_enroll(request: Request):
@@ -167,6 +167,7 @@ async def mfa_enroll_confirm(body: MFAEnrollVerify):
         },
     )
     return {"ok": True, "backup_codes": backup_codes_raw}
+
 
 @router.get("/api/home")
 async def home(current_user=Depends(get_current_user)):
