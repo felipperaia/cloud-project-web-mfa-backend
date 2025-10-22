@@ -170,6 +170,10 @@ async def mfa_enroll_confirm(body: MFAEnrollVerify):
 
 @router.get("/api/home")
 async def home(current_user=Depends(get_current_user)):
+    # O usuário já está autenticado, e o filtro email_verified abaixo é uma segurança extra.
+    if not current_user.get("email_verified", False):
+        # Pode ajustar para 401 se preferir, mas 403 é apropriado para autorizado porém proibido.
+        raise HTTPException(403, "E-mail não confirmado")
     return {
         "userid": current_user.get("userid"),
         "username": current_user.get("username"),
