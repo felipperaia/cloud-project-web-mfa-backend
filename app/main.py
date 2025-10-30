@@ -14,6 +14,7 @@ async def healthz_head():
 
 ALLOWED_ORIGINS = [
     "https://mfacloud.netlify.app",
+    "https://dashboard-io-t-silos-front-g8b87imzs.vercel.app",
     # "http://localhost:3000",
 ]
 
